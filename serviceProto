@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package proto.com.axiom.revbackend;
+
+import "google/rpc/status.proto";
+import "proto/com/axiom/revbackend/FinRevenueBackend.proto";
+import "si/grpc.proto";
+
+option java_multiple_files = true;
+
+// Sample gRPC service definition for revBackend -- replace it with your real service
+service FinRevenueBackendsApi {
+  option (.si.restProxyServiceName) = "finPilotOfferRevRecRest"; //added for rest proxy
+  option (.si.resourceKeyType) = "string";
+  option (.si.resourceValueType) = "proto.com.axiom.revbackend.FinRevenueBackend";
+
+  /*rpc Get(FinRevenueBackendGetRequest) returns (FinRevenueBackendGetResponse) {
+    option (.si.methodType) = GET;
+  }*/
+
+  rpc processRevRec(FinRevenueBackendActionRequest) returns (FinRevenueBackendActionResponse) {
+    option (.si.methodType) = ACTION;
+  }
+}
+
+/*message FinRevenueBackendGetRequest {
+  si.RequestContext context = 1;
+  string key = 2;
+}
+
+message FinRevenueBackendGetResponse {
+  si.ResponseContext context = 1;
+  FinRevenueBackend value = 2;
+}
+ */
+
+message FinRevenueBackendActionRequest {
+  si.RequestContext context = 1;
+  FinRevenueBackend value = 2;
+}
+
+message FinRevenueBackendActionResponse {
+  si.ResponseContext context = 1;
+  string key = 2;
+  optional FinRevenueBackend value = 3;
+  repeated string finRevResponses = 4;
+}

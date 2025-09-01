@@ -1,0 +1,299 @@
+package com.axiom.revbackend.repository;
+
+//import com.axiom.revbackend.jooq.entity.tables.FndLookupValues;
+//import com.axiom.revbackend.jooq.entity.tables.OkcKHeadersAllB;
+//import com.axiom.revbackend.jooq.entity.tables.OkcKLinesB;
+//import com.axiom.revbackend.jooq.entity.tables.xxOkcKLinesB;
+import com.axiom.revbackend.jooq.entity.packages.xxfpeglRevUtilPkg;
+import com.axiom.revbackend.jooq.entity.packages.arrevenueadjustmentpvt.udt.records.RevAdjRecTypeRecord;
+import com.axiom.revbackend.jooq.entity.packages.xxfpeglrevutilpkg.ProcessPilotRevrec;
+import com.axiom.revbackend.util.DBUtils;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import javax.sql.DataSource;
+import lombok.extern.slf4j.Slf4j;
+import org.jooq.DSLContext;
+//import org.jooq.Record4;
+//import org.jooq.Result;
+import org.xeril.util.tx.TransactionException;
+import proto.com.axiom.revbackend.FinRevenueBackendActionRequest;
+import proto.com.axiom.revbackend.FinRevenueBackendActionResponse;
+
+//import static org.jooq.impl.DSL.*;
+
+
+@Slf4j
+public class FinRevenueBackendsRepository {
+
+  private final DataSource _dataSource;
+
+  public FinRevenueBackendsRepository(DataSource dataSource) throws TransactionException {
+    this._dataSource = dataSource;
+  }
+
+  public FinRevenueBackendActionResponse processRevRec(FinRevenueBackendActionRequest request)
+      throws TransactionException, SQLException {
+
+    log.info("Inside processRevRec method");
+
+    FinRevenueBackendActionResponse.Builder responseBuilder = FinRevenueBackendActionResponse.newBuilder();
+
+
+    DSLContext dslContext = DBUtils.getDSLContext(_dataSource);
+
+    final String selectQuery1 = "SELECT \n"
+        + "    okhab.contract_number contract_number,\n"
+        + "    flv.meaning meaning,\n"
+        + "    flv.description description,\n"
+        + "    flv.tag tag,\n"
+        + "    okhab.org_id org_id,\n"
+        + "    oklb.date_terminated date_terminated,\n"
+        + "    oklb.end_date end_date\n"
+        + "    \n"
+        + "FROM \n"
+        + "    xx_okc_k_lines_b xoklb, \n"
+        + "    okc_k_headers_all_b okhab, \n"
+        + "    okc_k_lines_b oklb, \n"
+        + "    fnd_lookup_values flv\n"
+        + "WHERE \n"
+        + "    xoklb.chr_id = oklb.dnz_chr_id\n"
+        + "    AND xoklb.cle_id = oklb.id \n"
+        + "    AND oklb.dnz_chr_id = okhab.id \n"
+        + "    AND okhab.contract_number = NVL(?,okhab.contract_number)\n"
+        + "    AND (NVL(trunc(oklb.date_terminated),trunc(oklb.end_date))) < NVL(TO_DATE(?,'DD-MON-YYYY'), SYSDATE)\n"
+        //+ "    AND (? IS NULL OR NVL(trunc(oklb.date_terminated),trunc(oklb.end_date)) >= TRUNC(TO_DATE(?, 'YYYY-MM-DD')))\n"
+       // + "    AND (? IS NULL OR NVL(trunc(oklb.date_terminated),trunc(oklb.end_date)) <= TRUNC(TO_DATE(?, 'YYYY-MM-DD')))\n"
+       // + "    \n"
+        + "    AND flv.description = NVL(?,flv.description)\n"
+        + "    AND UPPER(flv.meaning) = NVL(?,UPPER(flv.meaning))\n"
+        + "    AND TRUNC(okhab.creation_date) >= to_date(flv.attribute1,'rrrr/mm/dd hh24:mi:ss')\n"
+        + "    AND xoklb.attribute65 IS NOT NULL\n"
+        + "    AND xoklb.attribute65 = UPPER(meaning)\n"
+        + "    AND flv.lookup_type = 'xx_CMRC_PILOT_PROGRAM'\n"
+        + "GROUP BY\n"
+        + "        okhab.contract_number,\n"
+        + "        flv.meaning,\n"
+        + "        flv.description,\n"
+        + "        flv.tag,\n"
+        + "        okhab.org_id,\n"
+        + "        oklb.date_terminated,\n"
+        + "        oklb.end_date";
+
+    List<ContractDetailRowMapper.ContractDetail> contractDetails = new ArrayList<>();
+
+    try (Connection connection = _dataSource.getConnection();
+        PreparedStatement preparedStatement = connection.prepareStatement(selectQuery1)) {
+
+      //String toDate = request.getValue().getToDate();
+      //String fromDate = request.getValue().getFromDate();
+
+      // Set query parameters
+      preparedStatement.setString(1, request.getValue().getContractNumber());
+      //preparedStatement.setString(2, fromDate);
+      //preparedStatement.setString(3, fromDate); // fromDate parameter
+      //preparedStatement.setString(4, toDate);
+      //preparedStatement.setString(5, toDate); // toDate parameter
+      preparedStatement.setString(2, request.getValue().getExecDate());
+      preparedStatement.setString(3, request.getValue().getProductName());
+      preparedStatement.setString(4, request.getValue().getOfferName());
+
+      try (ResultSet resultSet = preparedStatement.executeQuery()) {
+        while (resultSet.next()) {
+          ContractDetailRowMapper.ContractDetail contractDetail = new ContractDetailRowMapper.ContractDetail();
+          contractDetail.setContractNumber(resultSet.getString("contract_number"));
+          contractDetail.setMeaning(resultSet.getString("meaning"));
+          contractDetail.setDescription(resultSet.getString("description"));
+          contractDetail.setTag(resultSet.getString("tag"));
+          contractDetail.setOrgId(resultSet.getInt("org_id"));
+          contractDetails.add(contractDetail);
+        }
+      }
+    } catch (SQLException e) {
+      log.error("Exception occurred while fetching the contract details: " + request.getValue().getContractNumber(), e);
+      responseBuilder.addFinRevResponses("Exception occurred while fetching the contract details: " + e.getMessage());
+      throw new SQLException(e);
+    }
+
+    /*List<ContractDetailRowMapper.ContractDetail> contractDetails = _dbExecManager.execute(dbExecContext -> {
+      try {
+        return dbExecContext.getJdbcTemplate()
+            .query(selectQuery1, new Object[]{
+                    request.getValue().getContractNumber(),
+                    request.getValue().getFromDate(),
+                    request.getValue().getToDate(),
+                    request.getValue().getProductName(),
+                    request.getValue().getOfferName()
+                }, new ContractDetailRowMapper());
+      } catch (Exception e) {
+        log.error("Exception occurred while fetching the contract details: " + request.getValue().getContractNumber(), e);
+        responseBuilder.addFinRevResponses("Exception occurred while fetching the contract details: " + e.getMessage());
+        throw new SQLException(e);
+      }
+    });*/
+
+    if (contractDetails.isEmpty()) {
+      log.info("No records found for the given input Contract Number: {}, Exec Date: {}, Product Name: {}, Offer Name: {}",
+          request.getValue().getContractNumber(), request.getValue().getExecDate(), request.getValue().getProductName(),
+          request.getValue().getOfferName());
+      responseBuilder.addFinRevResponses("No records found for the given input");
+      return responseBuilder.build();
+    }
+
+
+
+    String selectQuery2 = "SELECT racta.trx_number,\n" + "         racta.customer_trx_id,\n"
+        + "         ractla.customer_trx_line_id\n" + "    FROM ra_customer_trx_all racta,\n"
+        + "         ra_customer_trx_lines_all ractla,\n" + "         ra_cust_trx_types_all ractta,\n"
+        + "         (WITH dts AS(\n" + "          SELECT TRUNC(c.start_date) AS from_dt,\n"
+        + "                 TRUNC(c.end_date) AS to_dt,\n" + "            TRUNC(c.date_terminated) AS termination_dt\n"
+        + "           FROM okc_k_headers_all_b b,\n"
+        + "                okc_k_lines_b c\n"
+        + "           WHERE contract_number = ?\n"
+        + "             AND c.dnz_chr_id = b.id )\n"
+        + "          SELECT ADD_MONTHS(from_dt,(level-1)*12) AS from_dt,\n"
+        + "                 LEAST(to_dt, ADD_MONTHS(from_dt,(level*12))-1) AS to_dt,\n" + "            termination_dt AS termination_dt\n"
+        + "             FROM dts\n"
+        + "         CONNECT BY ADD_MONTHS(from_dt,(level-1)*12) <= to_dt) dates\n"
+        + "   WHERE racta.interface_header_attribute1 = ? \n"
+        + "     AND ractla.customer_trx_id = racta.customer_trx_id\n" + "     AND ractla.line_type = 'LINE'\n"
+        + "     AND ractla.rule_start_date >= TRUNC(dates.from_dt)\n"
+        + "     AND ractla.rule_end_date <= TRUNC(dates.to_dt)\n"
+
+       // + "     AND (? IS NULL OR (NVL(TRUNC(dates.termination_dt),TRUNC(dates.to_dt)) >= TRUNC(TO_DATE(?,'YYYY-MM-DD'))))"
+       // + "     AND (? IS NULL OR (NVL(TRUNC(dates.termination_dt),TRUNC(dates.to_dt)) <= TRUNC(TO_DATE(?,'YYYY-MM-DD'))))"
+        + " AND (NVL(TRUNC(dates.termination_dt),TRUNC(dates.to_dt))) < NVL(TO_DATE(?,'DD-MON-YYYY'), SYSDATE)\n"
+        + "     AND ractta.cust_trx_type_id = racta.cust_trx_type_id\n" + "     AND ractta.type = 'INV'\n"
+        + "     AND NOT EXISTS (SELECT 1\n" + "                       FROM ra_cust_trx_line_gl_dist_all ractgda\n"
+        + "                      WHERE ractgda.customer_trx_id = racta.customer_trx_id\n"
+        + "                        AND ractgda.customer_trx_line_id = ractla.customer_trx_line_id\n"
+        + "                        AND ractgda.amount IS NOT NULL\n"
+        + "                        AND ractgda.original_gl_date IS NOT NULL\n"
+        + "                        AND ractgda.account_class = 'REV') \n"
+        + "   GROUP BY racta.trx_number,\n"
+        + "            racta.customer_trx_id,\n" + "            ractla.customer_trx_line_id";
+
+
+    for (ContractDetailRowMapper.ContractDetail contractDetail : contractDetails) {
+      log.info("Contract Number: {}, Meaning: {}, Description: {}, Tag: {}",
+          contractDetail.getContractNumber(), contractDetail.getMeaning(), contractDetail.getDescription(),
+          contractDetail.getTag());
+
+
+      List<InvoiceDetailRowMapper.InvoiceDetail> invoiceDetails = new ArrayList<>();
+
+      try (Connection connection = _dataSource.getConnection();
+          PreparedStatement preparedStatement = connection.prepareStatement(selectQuery2)) {
+
+        //String toDate = request.getValue().getToDate();
+        //String fromDate = request.getValue().getFromDate();
+
+        // Set query parameters
+        preparedStatement.setString(1, contractDetail.getContractNumber());
+        preparedStatement.setString(2, contractDetail.getContractNumber());
+        preparedStatement.setString(3, request.getValue().getExecDate());
+        //preparedStatement.setString(3, fromDate);
+        //preparedStatement.setString(4, fromDate); // fromDate parameter
+        //preparedStatement.setString(5, toDate);
+        //preparedStatement.setString(6, toDate); // toDate parameter
+
+
+        try (ResultSet resultSet = preparedStatement.executeQuery()) {
+          while (resultSet.next()) {
+            InvoiceDetailRowMapper.InvoiceDetail invoiceDetail = new InvoiceDetailRowMapper.InvoiceDetail();
+            invoiceDetail.setInvoiceNumber(resultSet.getString("trx_number"));
+            invoiceDetail.setCustTrxId(resultSet.getString("customer_trx_id"));
+            invoiceDetail.setCustTrxLineId(resultSet.getString("customer_trx_line_id"));
+            invoiceDetails.add(invoiceDetail);
+          }
+        }
+      } catch (SQLException e) {
+        log.error("Exception occurred while fetching the invoice details for contract: " + contractDetail.getContractNumber(), e);
+        responseBuilder.addFinRevResponses("Exception occurred while fetching the invoice details: " + e.getMessage());
+        throw new SQLException(e);
+      }
+
+
+      /*List<InvoiceDetailRowMapper.InvoiceDetail> invoiceDetails =  _dbExecManager.execute(dbExecContext -> {
+        try {
+          return dbExecContext.getJdbcTemplate()
+              .query(selectQuery2,
+                  new Object[]{
+                      contractDetail.getContractNumber(),
+                      contractDetail.getContractNumber(),
+                      Integer.parseInt(request.getValue().getBufferDays())
+                      //Integer.parseInt(contractDetail.getTag().trim())
+                  }, new InvoiceDetailRowMapper());
+        } catch (Exception e) {
+          log.error("Exception occurred while fetching the contract details: " + request.getValue().getContractNumber(),
+              e);
+          responseBuilder.addFinRevResponses("Exception occurred while fetching the contract details: " + e.getMessage());
+          throw new SQLException(e);
+        }
+      });*/
+
+      if (invoiceDetails.isEmpty()) {
+        log.info("No eligible invoice records found for the given contract number: {} and tag: {}",
+            contractDetail.getContractNumber(), contractDetail.getTag());
+        responseBuilder.addFinRevResponses("No eligible Invoice records found for the given input");
+        return responseBuilder.build();
+      }
+
+      for (InvoiceDetailRowMapper.InvoiceDetail invoiceDetail : invoiceDetails) {
+
+        log.info("Invoice Number: {}, Customer Trx Id: {}, Customer Trx Line Id: {}",
+            invoiceDetail.getInvoiceNumber(), invoiceDetail.getCustTrxId(), invoiceDetail.getCustTrxLineId());
+
+        xxfpeglRevUtilPkg.xxfpeglAppsInitialize(dslContext.configuration(), 1286, 20678, 222);
+        xxfpeglRevUtilPkg.xxfpeglMoGlobalInit(dslContext.configuration(), "AR");
+        xxfpeglRevUtilPkg.xxfpeglMoGlobal(dslContext.configuration(), contractDetail.getOrgId());
+
+        RevAdjRecTypeRecord revAdjRecTypeRecord = new RevAdjRecTypeRecord();
+        revAdjRecTypeRecord.setTrxNumber(invoiceDetail.getInvoiceNumber());
+        revAdjRecTypeRecord.setCustomerTrxId(Long.parseLong(invoiceDetail.getCustTrxId()));
+        revAdjRecTypeRecord.setFromCustTrxLineId(Long.parseLong(invoiceDetail.getCustTrxLineId()));
+        revAdjRecTypeRecord.setToCustTrxLineId(Long.parseLong(invoiceDetail.getCustTrxLineId()));
+        revAdjRecTypeRecord.setAdjustmentType("EA");
+        revAdjRecTypeRecord.setAmountMode("T");
+        revAdjRecTypeRecord.setLineSelectionMode("A"); //LINE_SELECTION_MODE
+        revAdjRecTypeRecord.setReasonCode("RA");
+        revAdjRecTypeRecord.setGlDate(new Date(System.currentTimeMillis()).toLocalDate()); //GL_DATE
+
+        log.info("Calling processPilotRevrec with parameters: ");
+
+
+        ProcessPilotRevrec p = xxfpeglRevUtilPkg.processPilotRevrec(
+            dslContext.configuration(),
+            2.0,
+            "T",
+            revAdjRecTypeRecord
+        );
+
+
+        log.info("API Return Status is: {}", p.getXReturnStatus());
+        log.info("Adjustment ID is: {}", p.getXAdjustmentId());
+        log.info("Adjustment Number is: {}", p.getXAdjustmentNumber());
+        log.info("Msg Count is: {}", p.getXMsgCount());
+        log.info("Msg data is: {}", p.getXMsgData());
+
+        String responseForInvoice =
+            "Invoice Number: " + invoiceDetail.getInvoiceNumber() + " | " + "Return Status: " + p.getXReturnStatus()
+                + " | " + "Adjustment ID: " + p.getXAdjustmentId() + " | " + "Adjustment Number: "
+                + p.getXAdjustmentNumber() + " | " + "Msg Count: " + p.getXMsgCount() + " | " + "Msg data: "
+                + p.getXMsgData();
+
+        responseBuilder.addFinRevResponses(responseForInvoice);
+        log.info("Response for Invoice: {}", responseForInvoice);
+      }
+    }
+
+    if (responseBuilder.getFinRevResponsesCount() == 0) {
+      responseBuilder.addFinRevResponses("No records found for the given input");
+    }
+    return responseBuilder.build();
+  }
+}
