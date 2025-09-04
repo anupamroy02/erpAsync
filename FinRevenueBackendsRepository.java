@@ -15,7 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-// I'm adding these imports for the async processing enhancement
+// Done by Max - I'm adding these imports for the async processing enhancement
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.CompletableFuture;
@@ -39,14 +39,14 @@ public class FinRevenueBackendsRepository {
 
     private final DataSource _dataSource;
 
-    // I'm adding these fields to support async processing as per the requirements
+    // Done by Max - I'm adding these fields to support async processing as per the requirements
     private final ExecutorService asyncExecutor;
     private final Set<String> processingRequests;
 
     public FinRevenueBackendsRepository(DataSource dataSource) throws TransactionException {
         this._dataSource = dataSource;
 
-        // I'm initializing the async processing infrastructure here
+        // Done by Max - I'm initializing the async processing infrastructure here
         // I'm creating a thread pool for background processing
         this.asyncExecutor = Executors.newFixedThreadPool(5);
         // I'm using this to track active requests for idempotency
@@ -60,7 +60,7 @@ public class FinRevenueBackendsRepository {
 
         log.info("Inside processRevRec method");
 
-        // I'm adding the routing logic here as specified in the requirements document
+        // Done by Max - I'm adding the routing logic here as specified in the requirements document
         String contractNumber = request.getValue().getContractNumber();
 
         if (contractNumber == null || contractNumber.trim().isEmpty()) {
@@ -75,7 +75,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * I'm handling synchronous processing here with existing functionality preserved
+     * Done by Max - I'm handling synchronous processing here with existing functionality preserved
      * This maintains backward compatibility for existing clients
      */
     private FinRevenueBackendActionResponse handleSyncProcessing(FinRevenueBackendActionRequest request)
@@ -302,7 +302,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * I'm handling asynchronous processing here with new functionality as per requirements
+     * Done by Max - I'm handling asynchronous processing here with new functionality as per requirements
      * This returns immediate acknowledgment and processes in background
      */
     private FinRevenueBackendActionResponse handleAsyncProcessing(FinRevenueBackendActionRequest request) {
@@ -358,7 +358,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * I'm processing all eligible contracts in the background
+     * Done by Max - I'm processing all eligible contracts in the background
      * This method handles the main async processing logic
      */
     private void processAllEligibleContractsAsync(FinRevenueBackendActionRequest request, String requestId) {
@@ -404,7 +404,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * Finding all eligible contracts for async processing
+     * Done by Max - Finding all eligible contracts for async processing
      * This uses the same query logic but without contract number filter
      */
     private List<ContractDetailRowMapper.ContractDetail> findAllEligibleContracts(
@@ -479,7 +479,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * Processing individual contract in async mode
+     * Done by Max - Processing individual contract in async mode
      * This reuses existing logic but with async-specific logging and error handling
      */
     private void processIndividualContractAsync(FinRevenueBackendActionRequest request,
@@ -522,7 +522,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * Finding invoices for a specific contract (extracted from existing logic for reuse)
+     * Done by Max - Finding invoices for a specific contract (extracted from existing logic for reuse)
      */
     private List<InvoiceDetailRowMapper.InvoiceDetail> findInvoicesForContract(
             FinRevenueBackendActionRequest request,
@@ -584,7 +584,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * I'm processing individual invoice in async mode with the same ERP call logic
+     * Done by Max - I'm processing individual invoice in async mode with the same ERP call logic
      */
     private void processInvoiceAsync(DSLContext dslContext,
                                      ContractDetailRowMapper.ContractDetail contractDetail,
@@ -649,7 +649,7 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * generating unique request ID for tracking and idempotency
+     * Done by Max - generating unique request ID for tracking and idempotency
      */
     private String generateRequestId(FinRevenueBackendActionRequest request) {
         try {
@@ -672,14 +672,14 @@ public class FinRevenueBackendsRepository {
     }
 
     /**
-     * providing method to get active request count for monitoring
+     * Done by Max - providing method to get active request count for monitoring
      */
     public int getActiveRequestCount() {
         return processingRequests.size();
     }
 
     /**
-     * Providing proper shutdown method for cleanup when application stops
+     * Done by Max - Providing proper shutdown method for cleanup when application stops
      */
     public void shutdown() {
         log.info("Shutting down async executor...");
